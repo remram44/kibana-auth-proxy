@@ -1,6 +1,7 @@
 const express = require('express');
 const { auth, requiresAuth } = require('express-openid-connect');
 const http = require('http');
+const https = require('https');
 
 const PORT = 3000;
 
@@ -27,8 +28,15 @@ const config = {
 };
 
 const upstream_url = new URL(process.env.UPSTREAM);
-if(upstream_url.protocol !== 'http:') {
-  console.error('Invalid UPSTREAM: protocol should be http');
+let UPSTREAM_PROTO, UPSTREAM_PORT;
+if(upstream_url.protocol === 'http:') {
+  UPSTREAM_PROTO = http;
+  UPSTREAM_PORT = 80;
+} else if(upstream_url.protocol === 'https:') {
+  UPSTREAM_PROTO = https;
+  UPSTREAM_PORT = 443;
+} else {
+  console.error('Invalid UPSTREAM: protocol should be http or https');
   process.exit(1);
 }
 if(
@@ -42,38 +50,45 @@ if(
   process.exit(1);
 }
 const UPSTREAM_HOST = upstream_url.host;
-const UPSTREAM_PORT = parseInt(upstream_url.port || 80);
+if(upstream_url.port) {
+  UPSTREAM_PORT = parseInt(upstream_url.port);
+}
+console.log(`Using upstream ${UPSTREAM_HOST}:${UPSTREAM_PORT}`);
 
 app.use(auth(config));
 
 function proxy(req, res) {
-  const proxyReq = http.request(
+  const headers = {};
+  for(let [key, value] of Object.entries(req.headers)) {
+    const lowerKey = key.toLowerCase();
+    if(lowerKey !== 'host' && lowerKey !== 'connection') {
+      headers[key] = value;
+    }
+  }
+  const proxyReq = UPSTREAM_PROTO.request(
     {
       hostname: UPSTREAM_HOST,
       port: UPSTREAM_PORT,
       path: req.url,
       method: req.method,
-      headers: req.headers,
+      headers: headers,
     },
     (proxyRes) => {
-      console.log('Connection established: ');
+      console.log(proxyRes.statusCode, req.url);
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
       proxyRes.on('data', (chunk) => {
-        console.log('Data from upstream');
         res.write(chunk, 'binary');
       });
       proxyRes.on('end', () => {
-        console.log('End from upstream');
         res.end()
       });
     },
   );
 
   req.on('data', (chunk) => {
-    console.log('Data from client');
     proxyReq.write(chunk, 'binary');
   });
   req.on('end', () => {
-    console.log('End from client');
     proxyReq.end();
   });
 }
