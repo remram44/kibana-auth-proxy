@@ -93,8 +93,69 @@ function proxy(req, res) {
   });
 }
 
+function doLogin(req, res) {
+  // Send login request
+  const path = '/internal/security/login';
+  console.log('Sending login request');
+  const loginReq = UPSTREAM_PROTO.request(
+    {
+      hostname: UPSTREAM_HOST,
+      port: UPSTREAM_PORT,
+      path,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'kbn-version': '7.10.2',
+        'Origin': `http://${req.headers.host}`,
+        'Referer': `http://${req.headers.host}/login?next=%2F`,
+      },
+    },
+    (loginRes) => {
+      debugger;
+      console.log('(login)', loginRes.statusCode, path);
+      if(loginRes.statusCode === 200) {
+        // Send cookie and redirect
+        res.writeHead(
+          303,
+          {
+            'Set-Cookie': loginRes.headers['set-cookie'],
+            'Location': '/',
+          },
+        );
+        res.end();
+        console.log('(login complete)', 303, req.url);
+      } else {
+        console.log(loginRes.headers);
+        res.writeHead(loginRes.statusCode, loginRes.headers);
+        loginRes.on('data', (chunk) => {
+          res.write(chunk, 'binary');
+        });
+        loginRes.on('end', () => res.end());
+      }
+    },
+  );
+  loginReq.write(JSON.stringify({
+    providerType: 'basic',
+    providerName: 'basic',
+    currentURL: `http://${req.headers.host}/login?next=%2F`,
+    params: {
+      username: process.env.USERNAME,
+      password: process.env.PASSWORD,
+    },
+  }));
+  loginReq.end();
+}
+
 app.all('/*', (req, res) => {
-  proxy(req, res);
+  // If we are not authenticated with OIDC, we will be redirected to do the auth
+  // (because authRequired is set)
+  if(req.url.startsWith('/login')) {
+    // If we are hitting the Kibana login page, send the login request
+    doLogin(req, res);
+  } else {
+    // Otherwise just proxy
+    proxy(req, res);
+  }
 });
 
 app.listen(PORT, () => {
