@@ -1,5 +1,6 @@
 const express = require('express');
 const { auth, requiresAuth } = require('express-openid-connect');
+const cookieParser = require('cookie-parser');
 const http = require('http');
 
 const PORT = 3000;
@@ -28,7 +29,10 @@ const config = {
 
 app.use(auth(config));
 
+app.use(cookieParser());
+
 app.all('/*', (req, res) => {
+  console.log('Cookies: ', req.cookies);
   res.type('text/plain').send('Hello, world');
 });
 
