@@ -93,6 +93,14 @@ function proxy(req, res) {
   });
 }
 
+function getCredentialsForUser(oidcSub) {
+  // TODO: Look up username and password for this OIDC identity
+  const username = process.env.USERNAME;
+  const password = process.env.PASSWORD;
+  console.log('mapping', oidcSub, 'to', username);
+  return {username, password};
+}
+
 function doLogin(req, res) {
   // Send login request
   const path = '/internal/security/login';
@@ -138,10 +146,7 @@ function doLogin(req, res) {
     providerType: 'basic',
     providerName: 'basic',
     currentURL: `http://${req.headers.host}/login?next=%2F`,
-    params: {
-      username: process.env.USERNAME,
-      password: process.env.PASSWORD,
-    },
+    params: getCredentialsForUser(req.oidc.user.sub),
   }));
   loginReq.end();
 }
