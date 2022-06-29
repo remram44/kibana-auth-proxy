@@ -26,10 +26,60 @@ const config = {
   },
 };
 
+const upstream_url = new URL(process.env.UPSTREAM);
+if(upstream_url.protocol !== 'http:') {
+  console.error('Invalid UPSTREAM: protocol should be http');
+  process.exit(1);
+}
+if(
+  (upstream_url.pathname !== '/' && upstream_url.pathname !== '')
+  || upstream_url.search
+  || upstream_url.hash
+  || upstream_url.username
+  || upstream_url.password
+) {
+  console.error('Invalid UPSTREAM: path is set');
+  process.exit(1);
+}
+const UPSTREAM_HOST = upstream_url.host;
+const UPSTREAM_PORT = parseInt(upstream_url.port || 80);
+
 app.use(auth(config));
 
+function proxy(req, res) {
+  const proxyReq = http.request(
+    {
+      hostname: UPSTREAM_HOST,
+      port: UPSTREAM_PORT,
+      path: req.url,
+      method: req.method,
+      headers: req.headers,
+    },
+    (proxyRes) => {
+      console.log('Connection established: ');
+      proxyRes.on('data', (chunk) => {
+        console.log('Data from upstream');
+        res.write(chunk, 'binary');
+      });
+      proxyRes.on('end', () => {
+        console.log('End from upstream');
+        res.end()
+      });
+    },
+  );
+
+  req.on('data', (chunk) => {
+    console.log('Data from client');
+    proxyReq.write(chunk, 'binary');
+  });
+  req.on('end', () => {
+    console.log('End from client');
+    proxyReq.end();
+  });
+}
+
 app.all('/*', (req, res) => {
-  res.type('text/plain').send('Hello, world');
+  proxy(req, res);
 });
 
 app.listen(PORT, () => {
