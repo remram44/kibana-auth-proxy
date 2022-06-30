@@ -10,5 +10,6 @@ RUN lock_hash="$(shasum -a 256 package-lock.json)" && \
     npm install && \
     echo "$lock_hash" | shasum -c
 COPY index.js /src/
+COPY lib /src/lib
 
 CMD ["node", "index.js"]
