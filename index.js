@@ -51,7 +51,7 @@ if(
   console.error('Invalid UPSTREAM: path is set');
   process.exit(1);
 }
-const UPSTREAM_HOST = upstream_url.host;
+const UPSTREAM_HOST = upstream_url.hostname;
 if(upstream_url.port) {
   UPSTREAM_PORT = parseInt(upstream_url.port);
 }
